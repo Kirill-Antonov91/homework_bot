@@ -8,7 +8,11 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import APIRequestError, IncorrectRequestStatus
+from exceptions import (
+    IncorrectRequestStatus,
+    APIRequestError,
+    MessageSendError,
+)
 
 load_dotenv()
 
@@ -36,7 +40,7 @@ formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 
 
-def check_tokens():
+def check_tokens() -> bool:
     """Проверяет наличие всех обязательных переменных окружения."""
     env_tokens = (
         PRACTICUM_TOKEN,
@@ -46,21 +50,23 @@ def check_tokens():
     return all(env_tokens)
 
 
-def send_message(bot, message):
+def send_message(bot: telegram.Bot, message: str) -> None:
     """Отправляет сообщение в Telegram чат."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         message = "Бот отправил сообщение в Telegram чат"
         logger.debug(message)
-    except Exception as error:
-        message = f"Сбой в отправке сообщения: {error}"
-        logger.error(message)
+    except telegram.error.TelegramError as error:
+        raise MessageSendError("cообщение НЕ отправлено. Ошибка:" f"{error}")
+    else:
+        logging.info("Сообщение успешно отправлено")
 
 
-def get_api_answer(timestamp):
+def get_api_answer(timestamp: int) -> dict:
     """Осуществляет запрос к эндпоинту API-сервиса."""
     payload = {"from_date": timestamp}
     try:
+        logger.info("Начался запрос к API")
         response = requests.get(ENDPOINT, headers=HEADERS, params=payload)
     except requests.RequestException:
         message = "Ошибка при запросе к API"
@@ -71,7 +77,7 @@ def get_api_answer(timestamp):
     return response.json()
 
 
-def check_response(response):
+def check_response(response: dict) -> dict:
     """Проверяет ответ API на соответствие."""
     if not isinstance(response, dict):
         message = (
@@ -97,7 +103,7 @@ def check_response(response):
     return homeworks
 
 
-def parse_status(homework):
+def parse_status(homework: dict) -> str:
     """Проверяет статус домашней работы, формирует сообщение."""
     homework_name = homework.get("homework_name")
     if not homework_name:
@@ -119,7 +125,7 @@ def parse_status(homework):
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
-def main():
+def main() -> None:
     """Основная логика работы бота."""
     logger.debug("Бот запущен")
 
